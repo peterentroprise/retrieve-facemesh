@@ -1,0 +1,190 @@
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.117.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/scatter-gl@0.0.5/lib/scatter-gl.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.0.0/dist/tf-backend-wasm.js"></script>
+
+  <style>
+    /* wrapper for container */
+    .canvas-wrapper,
+    #scatter-gl-container {
+      display: inline-block;
+      vertical-align: top;
+    }
+
+    /* main container */
+    #scatter-gl-container {
+      border: solid 1px black;
+      position: relative;
+    }
+
+    /* center the canvas in the wrapper */
+    #scatter-gl-container canvas {
+      transform: translate3d(-50%, -50%, 0);
+      left: 50%;
+      top: 50%;
+      position: absolute;
+    }
+  </style>
+</head>
+<body>
+  <div id="main">
+    <div class="container">
+      <div class="canvas-wrapper">
+        <canvas id="output"></canvas>
+        <video
+          id="video"
+          playsinline
+          style="
+            -webkit-transform: scaleX(-1);
+            transform: scaleX(-1);
+            visibility: hidden;
+            width: auto;
+            height: auto;
+          "
+        ></video>
+      </div>
+      <div id="scatter-gl-container"></div>
+    </div>
+  </div>
+
+  <div id="confidence-container">...</div>
+</body>
+
+<script>
+  /* Declare Variables*/
+  let model,
+    ctx,
+    videoWidth,
+    videoHeight,
+    video,
+    canvas,
+    scatterGLHasInitialized = false,
+    scatterGL;
+
+  /* Declare Constants */
+  const VIDEO_SIZE = 500;
+
+  /* Setup webcam and attached it to the video element */
+  async function setupCamera() {
+    video = document.getElementById("video");
+
+    /* Capture the steam from the webcam using browser API */
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: VIDEO_SIZE,
+        height: VIDEO_SIZE,
+      },
+    });
+
+    /* Set the video elements source as the stream */
+    video.srcObject = stream;
+
+    /* Resolve video */
+    return new Promise((resolve) => {
+      video.onloadedmetadata = () => {
+        resolve(video);
+      };
+    });
+  }
+
+  /* Take the prediction that is returned fron the model and display the confidence score as well as the mesh keypoints */
+  async function renderPrediction() {
+    /* Get the predictions fron the model based on the webcam video */
+    const predictions = await model.estimateFaces(video);
+
+    /* Draw the initial overlay for the mesh keypoints */
+    ctx.drawImage(
+      video,
+      0,
+      0,
+      videoWidth,
+      videoHeight,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    /* Initialize the element containing the confidence score */
+    document.getElementById("confidence-container").innerHTML = "";
+
+    /* If there are ANY predictions of faces in the frame render the confidence score and mesh keypoints */
+    if (predictions.length > 0) {
+      /* Loop through all different faces/predictions */
+      predictions.forEach((prediction) => {
+        /* Attempt to display the confidence score, otheriwse handle error*/
+        try {
+          document.getElementById("confidence-container").innerHTML +=
+            "Confidence: " +
+            prediction.faceInViewConfidence.toFixed(4) +
+            "<br>";
+        } catch (err) {
+          document.getElementById("confidence-container").innerHTML =
+            err.message;
+        }
+
+        /* Get the keypoints from the predictions mesh */
+        const keypoints = prediction.scaledMesh;
+
+        /* Loop through all the keypoints and display them in the canvas */
+        for (let i = 0; i < keypoints.length; i++) {
+          /* Grab the cordinates */
+          const x = keypoints[i][0];
+          const y = keypoints[i][1];
+
+          /* Draw the loot */
+          ctx.beginPath();
+          ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      });
+    }
+
+    /* Big old loopdy loop back to infinity */
+    requestAnimationFrame(renderPrediction);
+  }
+
+  /* Main Application */
+  async function main() {
+    /* Setup the web assembly backend */
+    await tf.setBackend("wasm");
+
+    /* Setup the camera stream */
+    await setupCamera();
+
+    /* Start the camera stream */
+    video.play();
+    videoWidth = video.videoWidth;
+    videoHeight = video.videoHeight;
+    video.width = videoWidth;
+    video.height = videoHeight;
+
+    /* Setup the face overlay canvas*/
+    canvas = document.getElementById("output");
+    canvas.width = videoWidth;
+    canvas.height = videoHeight;
+    const canvasContainer = document.querySelector(".canvas-wrapper");
+    canvasContainer.style = `width: ${videoWidth}px; height: ${videoHeight}px`;
+
+    /* Setup canvas context */
+    ctx = canvas.getContext("2d");
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.fillStyle = "#2227a1";
+    ctx.strokeStyle = "#2227a1";
+    ctx.lineWidth = 0.5;
+
+    /* Init the FaceMesh model */
+    model = await facemesh.load({ maxFaces: 10 });
+
+    /* Get the prediction from the model and render both the confidence score and the mesh keypoints */
+    renderPrediction();
+  }
+
+  /* Give it the friggin beans */
+  main();
+</script>
