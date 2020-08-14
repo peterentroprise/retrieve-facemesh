@@ -2,6 +2,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.0.0/dist/tf-backend-wasm.js"></script>
+  <script src="triangulation.js"></script>
 
   <style>
     /* wrapper for container */
@@ -51,6 +52,21 @@
 </body>
 
 <script>
+  /* Additional code for drawing the triangulation between facemesh points */
+  function drawPath(ctx, points, closePath) {
+    const region = new Path2D();
+    region.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) {
+      const point = points[i];
+      region.lineTo(point[0], point[1]);
+    }
+
+    if (closePath) {
+      region.closePath();
+    }
+    ctx.stroke(region);
+  }
+
   /* Declare Variables*/
   let model,
     ctx,
@@ -128,16 +144,28 @@
         /* Get the keypoints from the predictions mesh */
         const keypoints = prediction.scaledMesh;
 
+        /* RENDERS POINTS */
         /* Loop through all the keypoints and display them in the canvas */
-        for (let i = 0; i < keypoints.length; i++) {
-          /* Grab the cordinates */
-          const x = keypoints[i][0];
-          const y = keypoints[i][1];
+        // for (let i = 0; i < keypoints.length; i++) {
+        //   /* Grab the cordinates */
+        //   const x = keypoints[i][0];
+        //   const y = keypoints[i][1];
 
-          /* Draw the loot */
-          ctx.beginPath();
-          ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
-          ctx.fill();
+        //   /* Draw the loot */
+        //   ctx.beginPath();
+        //   ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
+        //   ctx.fill();
+        // }
+
+        /* RENDERS TRIANGLES */
+        for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+          const points = [
+            TRIANGULATION[i * 3],
+            TRIANGULATION[i * 3 + 1],
+            TRIANGULATION[i * 3 + 2],
+          ].map((index) => keypoints[index]);
+
+          drawPath(ctx, points, true);
         }
       });
     }
